@@ -1,12 +1,13 @@
 use {
-    crate::util::get_session,
+    crate::{cookie::build_session_cookie, util::get_session},
     futures::future::BoxFuture,
-    serde::de::DeserializeOwned,
+    serde::{de::DeserializeOwned, Serialize},
     tide::{Middleware, Next, Request, Response},
 };
 
 pub struct SecureCookieSessionMiddleware<Session> {
     secret_key: Vec<u8>,
+    path: String,
     _cookie: std::marker::PhantomData<Session>,
 }
 
@@ -22,15 +23,21 @@ impl<S> SecureCookieSessionMiddleware<S> {
     pub fn new(secret_key: Vec<u8>) -> Self {
         SecureCookieSessionMiddleware {
             secret_key,
+            path: "/".to_string(),
             _cookie: std::marker::PhantomData,
         }
+    }
+
+    pub fn set_path(&mut self, path: &str) -> &mut Self {
+        self.path = path.to_string();
+        self
     }
 }
 
 impl<State, Session> Middleware<State> for SecureCookieSessionMiddleware<Session>
 where
     State: Send + Sync + 'static,
-    Session: DeserializeOwned + Send + Sync + 'static,
+    Session: Serialize + DeserializeOwned + Send + Sync + 'static,
 {
     fn handle<'a>(
         &'a self,
@@ -42,7 +49,14 @@ where
             if let Some(session) = session {
                 req.set_ext(session);
             }
-            next.run(req).await
+            let mut resp = next.run(req).await?;
+            if let Some(session) = resp.ext::<Session>() {
+                let cookie = build_session_cookie(session, &self.secret_key)?
+                    .path(self.path.clone())
+                    .finish();
+                resp.insert_cookie(cookie);
+            }
+            Ok(resp)
         })
     }
 }
