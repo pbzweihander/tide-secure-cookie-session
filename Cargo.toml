@@ -1,0 +1,20 @@
+[package]
+name = "tide-secure-cookie-session"
+version = "0.1.0"
+authors = ["pbzweihander <pbzweihander@spoqa.com>"]
+edition = "2018"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/pbzweihander/tide-secure-cookie-session"
+
+[dependencies]
+base64 = "0.12.3"
+futures = "0.3.5"
+hmac = "0.8.1"
+serde = "1.0.114"
+serde_json = "1.0.55"
+sha-1 = "0.9.1"
+tide = "0.11.0"
+
+[dev-dependencies]
+async-std = { version = "1.6.2", features = ["attributes"] }
