@@ -1,6 +1,6 @@
 use {
     serde::{Deserialize, Serialize},
-    tide_secure_cookie_session::{build_session_cookie, SecureCookieSessionMiddleware},
+    tide_secure_cookie_session::SecureCookieSessionMiddleware,
 };
 
 static SECRET_KEY: &str = "very secure secret key";
@@ -28,18 +28,25 @@ async fn main() -> tide::Result<()> {
 async fn hello(req: tide::Request<()>) -> tide::Result {
     let session = req.ext::<MySession>();
     if let Some(session) = session {
+        let resp = tide::Response::new(tide::StatusCode::Ok);
+
         let new_session = MySession {
             name: session.name.clone(),
             count: session.count + 1,
         };
-        let cookie = build_session_cookie(&new_session, SECRET_KEY.as_bytes())?.finish();
+        // FIXME
+        // use Response::insert_ext
+        // https://github.com/http-rs/tide/commit/7f946a9c9bee84c430dda62ebdf736b287fa0797
+        let mut resp: tide::http::Response = resp.into();
+        resp.ext_mut().insert(new_session);
+        let mut resp: tide::Response = resp.into();
+
         let body = format!(
             "Hello! {}. You visited {} times.",
             session.name, session.count
         );
-        let mut resp = tide::Response::new(tide::StatusCode::Ok);
         resp.set_body(body);
-        resp.insert_cookie(cookie);
+
         Ok(resp)
     } else {
         Ok("No session found! Visit /login/<name> first."
@@ -51,9 +58,12 @@ async fn hello(req: tide::Request<()>) -> tide::Result {
 async fn login(req: tide::Request<()>) -> tide::Result {
     let name = req.param("name").unwrap();
     let session = MySession { name, count: 0 };
-    let cookie = build_session_cookie(&session, SECRET_KEY.as_bytes())?.finish();
-
-    let mut resp: tide::Response = tide::Redirect::new("/hello").into();
-    resp.insert_cookie(cookie);
+    let resp: tide::Response = tide::Redirect::new("/hello").into();
+    // FIXME
+    // use Response::insert_ext
+    // https://github.com/http-rs/tide/commit/7f946a9c9bee84c430dda62ebdf736b287fa0797
+    let mut resp: tide::http::Response = resp.into();
+    resp.ext_mut().insert(session);
+    let resp = resp.into();
     Ok(resp)
 }
