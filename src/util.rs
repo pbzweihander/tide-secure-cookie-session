@@ -4,6 +4,18 @@ use {
     sha1::Sha1,
 };
 
+pub fn sign(secret_key: &[u8], message: &[u8]) -> Vec<u8> {
+    let mut mac = Hmac::<Sha1>::new_varkey(secret_key).unwrap();
+    mac.update(message);
+    let result = mac.finalize();
+    result.into_bytes().as_slice().to_vec()
+}
+
+pub fn verify(secret_key: &[u8], message: &[u8], signature: &[u8]) -> bool {
+    let expected = sign(secret_key, message);
+    expected == signature
+}
+
 pub(crate) fn get_session<T: DeserializeOwned>(session: &str, secret_key: &[u8]) -> Option<T> {
     let i = session.find(".")?;
     let (payload, sign) = session.split_at(i);
@@ -31,16 +43,4 @@ pub(crate) fn make_session<T: Serialize>(
     let sign = sign(secret_key, payload.as_bytes());
     let sign = base64::encode(sign);
     Ok(format!("{}.{}", payload, sign))
-}
-
-pub(crate) fn sign(secret_key: &[u8], message: &[u8]) -> Vec<u8> {
-    let mut mac = Hmac::<Sha1>::new_varkey(secret_key).unwrap();
-    mac.update(message);
-    let result = mac.finalize();
-    result.into_bytes().as_slice().to_vec()
-}
-
-pub(crate) fn verify(secret_key: &[u8], message: &[u8], signature: &[u8]) -> bool {
-    let expected = sign(secret_key, message);
-    expected == signature
 }
