@@ -1,6 +1,5 @@
 use {
     crate::{cookie::build_session_cookie, util::get_session},
-    futures::future::BoxFuture,
     serde::{de::DeserializeOwned, Serialize},
     tide::{Middleware, Next, Request, Response},
 };
@@ -13,7 +12,8 @@ pub struct SecureCookieSessionMiddleware<Session> {
 
 impl<S> std::fmt::Debug for SecureCookieSessionMiddleware<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.debug_struct("SecureCookieMiddleware")
+        f.debug_struct("SecureCookieSessionMiddleware")
+            .field("path", &self.path)
             .field("secret_key", &"***")
             .finish()
     }
@@ -34,30 +34,29 @@ impl<S> SecureCookieSessionMiddleware<S> {
     }
 }
 
+#[async_trait::async_trait]
 impl<State, Session> Middleware<State> for SecureCookieSessionMiddleware<Session>
 where
-    State: Send + Sync + 'static,
+    State: Clone + Send + Sync + 'static,
     Session: Serialize + DeserializeOwned + Send + Sync + 'static,
 {
-    fn handle<'a>(
-        &'a self,
+    async fn handle(
+        &self,
         mut req: Request<State>,
-        next: Next<'a, State>,
-    ) -> BoxFuture<'a, tide::Result<Response>> {
-        Box::pin(async move {
-            let session = get_session_from_req::<State, Session>(&req, &self.secret_key);
-            if let Some(session) = session {
-                req.set_ext(session);
-            }
-            let mut resp = next.run(req).await?;
-            if let Some(session) = resp.ext::<Session>() {
-                let cookie = build_session_cookie(session, &self.secret_key)?
-                    .path(self.path.clone())
-                    .finish();
-                resp.insert_cookie(cookie);
-            }
-            Ok(resp)
-        })
+        next: Next<'_, State>,
+    ) -> tide::Result<Response> {
+        let session = get_session_from_req::<State, Session>(&req, &self.secret_key);
+        if let Some(session) = session {
+            req.set_ext(session);
+        }
+        let mut resp = next.run(req).await;
+        if let Some(session) = resp.ext::<Session>() {
+            let cookie = build_session_cookie(session, &self.secret_key)?
+                .path(self.path.clone())
+                .finish();
+            resp.insert_cookie(cookie);
+        }
+        Ok(resp)
     }
 }
 
