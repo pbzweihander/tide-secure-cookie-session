@@ -1,8 +1,8 @@
 use {
     crate::{cookie::build_session_cookie, util::get_session},
-    futures::future::BoxFuture,
+    // futures::future::BoxFuture,
     serde::{de::DeserializeOwned, Serialize},
-    tide::{Middleware, Next, Request, Response},
+    tide::{Middleware, Next, Request},
 };
 
 pub struct SecureCookieSessionMiddleware<Session> {
@@ -34,31 +34,67 @@ impl<S> SecureCookieSessionMiddleware<S> {
     }
 }
 
+
+// #[async_trait]
+// impl<State, F> Middleware<State> for F
+// where
+//     State: Clone + Send + Sync + 'static,
+//     F: Send
+//         + Sync
+//         + 'static
+//         + for<'a> Fn(
+//             Request<State>,
+//             Next<'a, State>,
+//         ) -> Pin<Box<dyn Future<Output = crate::Result> + 'a + Send>>,
+// {
+//     async fn handle(&self, req: Request<State>, next: Next<'_, State>) -> crate::Result {
+//         (self)(req, next).await
+//     }
+// }
+
+
+#[tide::utils::async_trait]
 impl<State, Session> Middleware<State> for SecureCookieSessionMiddleware<Session>
 where
-    State: Send + Sync + 'static,
+    State: Clone + Send + Sync + 'static,
     Session: Serialize + DeserializeOwned + Send + Sync + 'static,
 {
-    fn handle<'a>(
-        &'a self,
-        mut req: Request<State>,
-        next: Next<'a, State>,
-    ) -> BoxFuture<'a, tide::Result<Response>> {
-        Box::pin(async move {
-            let session = get_session_from_req::<State, Session>(&req, &self.secret_key);
-            if let Some(session) = session {
-                req.set_ext(session);
-            }
-            let mut resp = next.run(req).await?;
-            if let Some(session) = resp.ext::<Session>() {
-                let cookie = build_session_cookie(session, &self.secret_key)?
-                    .path(self.path.clone())
-                    .finish();
-                resp.insert_cookie(cookie);
-            }
-            Ok(resp)
-        })
+
+    async fn handle(&self, mut req: Request<State>, next: Next<'_, State>) -> tide::Result {
+        let session = get_session_from_req::<State, Session>(&req, &self.secret_key);
+        if let Some(session) = session {
+            req.set_ext(session);
+        }
+        let mut resp = next.run(req).await;
+        if let Some(session) = resp.ext::<Session>() {
+            let cookie = build_session_cookie(session, &self.secret_key)?
+                .path(self.path.clone())
+                .finish();
+            resp.insert_cookie(cookie);
+        }
+        Ok(resp)
     }
+
+    // fn handle<'a>(
+    //     &'a self,
+    //     mut req: Request<State>,
+    //     next: Next<'a, State>,
+    // ) -> BoxFuture<'a, tide::Result<Response>> {
+    //     Box::pin(async move {
+    //         let session = get_session_from_req::<State, Session>(&req, &self.secret_key);
+    //         if let Some(session) = session {
+    //             req.set_ext(session);
+    //         }
+    //         let mut resp = next.run(req).await?;
+    //         if let Some(session) = resp.ext::<Session>() {
+    //             let cookie = build_session_cookie(session, &self.secret_key)?
+    //                 .path(self.path.clone())
+    //                 .finish();
+    //             resp.insert_cookie(cookie);
+    //         }
+    //         Ok(resp)
+    //     })
+    // }
 }
 
 fn get_session_from_req<S, Session>(req: &Request<S>, secret_key: &[u8]) -> Option<Session>

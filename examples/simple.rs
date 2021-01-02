@@ -17,7 +17,7 @@ async fn main() -> tide::Result<()> {
         SecureCookieSessionMiddleware::<MySession>::new(SECRET_KEY.as_bytes().to_vec());
 
     let mut app = tide::new();
-    app.middleware(middleware);
+    app.with(middleware);
     app.at("/hello").get(hello);
     app.at("/login/:name").get(login);
     app.listen("0.0.0.0:8080").await?;
@@ -57,7 +57,7 @@ async fn hello(req: tide::Request<()>) -> tide::Result {
 
 async fn login(req: tide::Request<()>) -> tide::Result {
     let name = req.param("name").unwrap();
-    let session = MySession { name, count: 0 };
+    let session = MySession { name : name.to_string(), count: 0 };
     let resp: tide::Response = tide::Redirect::new("/hello").into();
     // FIXME
     // use Response::insert_ext
